@@ -1,0 +1,502 @@
+---
+title: "Analysis_all_data"
+author: "Stephan Amstler"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+## Load Libraries
+
+```{r setup, include=FALSE}
+
+library(plyr)
+library(tidyr)
+library(readr)
+library(jsonlite)
+library(tidyverse)
+library(patchwork)
+library(BlandAltmanLeh)
+
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+
+## Load data
+
+```{r collect_data}
+
+
+NGS_comparison_data <- read.csv('temp_all_NGS_comparison_data.csv')
+NGS_comparison_data_filtered <- read.csv('temp_all_NGS_comparison_data_filtered.csv')
+UMI_data <- read.csv('temp_all_UMI.csv')
+UMI_filtered <- read.csv('temp_all_UMI_filtered.csv')
+run_info <- read.csv('../info/Status_overview.csv', header = TRUE, sep = ";") %>% 
+   select('Acronym', 'Fragment', 'fastq_pass_reads')
+
+```
+
+## Set Variables
+
+```{r}
+
+NGS_groups <- NGS_comparison_data %>% 
+  group_by(Sample, Fragment) %>% 
+    summarize()
+
+n_NGS_groups <- nrow(NGS_groups)
+
+NGS_groups_filtered <- NGS_comparison_data_filtered %>% 
+  group_by(Sample, Fragment) %>% 
+    summarize()
+
+n_NGS_groups_filtered <- nrow(NGS_groups_filtered)
+
+plasmid_data <- UMI_data %>% filter(grepl('A_B', Sample))
+
+plasmid_groups <- plasmid_data %>% 
+  group_by(Sample_readable_PL, Fragment) %>% 
+  summarize()
+
+n_plasmid_groups <- nrow(plasmid_groups)
+
+plasmid_data_filtered <- UMI_filtered %>% filter(grepl('A_B', Sample))
+
+plasmid_groups_filtered <- plasmid_data_filtered %>% 
+  group_by(Sample_readable_PL, Fragment) %>% 
+  summarize()
+
+n_plasmid_groups_filtered <- nrow(plasmid_groups_filtered)
+
+```
+## Plot Coverage and Read Number
+
+```{r}
+
+
+reads_vs_final_bam_files <- UMI_data %>%
+  left_join(run_info, by = c("Sample" = "Acronym", "Fragment" = "Fragment")) %>%
+  group_by(Sample_readable, Fragment) %>%
+  mutate(mean_cov = mean(COV.TOTAL)) %>%
+  group_by(mean_cov, fastq_pass_reads, Sample_readable, Fragment) %>%
+  summarize()
+
+reads_vs_final_bam_files_plot <- reads_vs_final_bam_files %>%
+  ggplot(aes(x = mean_cov, y = fastq_pass_reads)) +
+  geom_point() +
+  geom_smooth(method = lm)
+
+ggsave("reads_vs_final_bam_files.jpg",
+       reads_vs_final_bam_files_plot,
+       path = "figures/")
+
+write.csv(reads_vs_final_bam_files, "reads_vs_final_bam_files.csv")
+
+```
+
+
+
+## NGS unfiltered Plots
+
+
+```{r pressure, echo=FALSE}
+
+detected_mutations <- tibble(sample = character(),
+                             fragment = integer(),
+                             num_of_muts_UMI = numeric(),
+                             num_of_muts_NGS = numeric(),
+                             num_of_deletions_NGS = numeric())
+
+
+for (i in 1:n_NGS_groups) {
+  sample = NGS_groups[[1]][i]
+  fragment = NGS_groups[[2]][i]
+  
+  NGS_filtered <- NGS_comparison_data %>%
+    filter(Sample == sample & Fragment == fragment)
+  
+  num_of_detected_mutations <- colSums(NGS_filtered > 0) 
+  
+  detected_mutations <- detected_mutations %>% add_row(
+    sample = sample, 
+    fragment = fragment, 
+    num_of_muts_UMI = num_of_detected_mutations["Variant_level_UMI"],
+    num_of_muts_NGS = num_of_detected_mutations["Variant_level_NGS"],
+    num_of_deletions_NGS = sum(grepl("D", NGS_filtered$Variant_NGS))) 
+  
+  r_squared <-
+    NGS_filtered %>% lm(Variant_level_UMI ~ Variant_level_NGS, data = .)
+  r_squared <- summary(r_squared)$r.squared
+  
+  comparison_variant_levels_ngs_umi <- NGS_filtered %>%
+    ggplot(aes(x = Variant_level_UMI, y = Variant_level_NGS)) +
+    geom_abline() +
+    geom_smooth(method = 'lm', show.legend = TRUE) +
+    scale_x_continuous(breaks = seq(0, 1, by = 0.25)) +
+    geom_point(position = 'jitter') +
+    labs(x = 'relative variance level UMI',
+         y = 'relative variance level NGS',
+         title = paste( sample, fragment, 'Variant levels of both Sequencing technology', sep = "_")) +
+    annotate(
+      'text',
+      x = 0.8,
+      y = 0.05,
+      label = paste0('R Squared = ', round(r_squared, digits = 4))
+    ) +
+    coord_cartesian(xlim = c(0,1), ylim = c(0,1))
+  
+  # Compare variance levels of different Sequencing methods
+  comparison_variant_levels_ngs_umi_per_position <-
+    NGS_filtered %>%
+    ggplot(aes(x = Position)) +
+    geom_point(aes(y = Variant_level_NGS, color = 'NGS'),
+               show.legend = TRUE) +
+    geom_point(aes(y = Variant_level_UMI, color = 'UMI'),
+               show.legend = TRUE) +
+    labs(x = 'position relative to reference sequence',
+         y = 'relative variant Level',
+         title = paste( sample, fragment, 'Variant levels per position and Sequencing technology', sep = "_"))
+  
+  jpeg(
+    file =  paste("figures", paste(
+      sample,
+      fragment,
+      "bland_altman.jpg",
+               sep = '_'), sep = "/"),
+    width = 10,
+    height = 10,
+    units = "in",
+    res = 300
+  )
+  
+  print(
+    bland.altman.plot(
+      NGS_filtered$Variant_level_NGS,
+      NGS_filtered$Variant_level_UMI,
+      main = paste(sample, fragment, "Variant levels", sep = "_"),
+      xlab = "Means",
+      ylab = "Differences",
+      graph.sys = "ggplot2",
+    ) +
+      geom_hline(aes(yintercept = 0)) +
+      coord_cartesian(xlim = c(0, 1), ylim = c(-0.2, 0.2)) +
+      annotate(
+        "text",
+        x = 0.7,
+        y = 0.15,
+        label = paste(
+          "cv =",
+          bland_stats$mean.diffs / mean(bland_stats$means) * 100,
+          sep = " "
+        )
+      )
+  )
+  dev.off()
+
+  ggsave(
+    paste(
+      sample,
+      fragment,
+      "comparison_variant_levels_ngs_umi.jpg",
+      sep = '_'
+    ),
+    comparison_variant_levels_ngs_umi,
+    path = "figures/"
+  )
+  
+  
+  ggsave(
+    paste(
+      sample,
+      fragment,
+      "comparison_variant_levels_ngs_umi_per_position.jpg",
+      sep = '_'
+    ),
+    comparison_variant_levels_ngs_umi_per_position,
+    path = "figures/"
+  )
+}
+
+write.csv(detected_mutations, "NGS_detected_mutations_unfiltered.csv")
+
+```
+
+
+## NGS filtered Plots 
+
+```{r pressure, echo=FALSE}
+detected_mutations <- tibble(sample = character(),
+                             fragment = integer(),
+                             num_of_muts_UMI = numeric(),
+                             num_of_muts_NGS = numeric(),
+                             num_of_deletions_NGS = numeric())
+
+
+for (i in 1:n_NGS_groups_filtered) {
+  sample = NGS_groups_filtered[[1]][i]
+  fragment = NGS_groups_filtered[[2]][i]
+  
+  NGS_filtered <- NGS_comparison_data_filtered %>%
+    filter(Sample == sample & Fragment == fragment)
+  
+  num_of_detected_mutations <- colSums(NGS_filtered != 0)
+  num_of_deletions <- colSums(NGS_filtered == "D")
+
+  detected_mutations <- detected_mutations %>% add_row(
+    sample = sample,
+    fragment = fragment,
+    num_of_muts_UMI = num_of_detected_mutations["Variant_level_UMI"],
+    num_of_muts_NGS = num_of_detected_mutations["Variant_level_NGS"],
+    num_of_deletions_NGS = num_of_deletions["Variant_NGS"])
+
+  r_squared <-
+    NGS_filtered %>% lm(Variant_level_UMI ~ Variant_level_NGS, data = .)
+  r_squared <- summary(r_squared)$r.squared
+  
+  comparison_variant_levels_ngs_umi <- NGS_filtered %>%
+    ggplot(aes(x = Variant_level_UMI, y = Variant_level_NGS)) +
+    geom_abline() +
+    geom_smooth(method = 'lm', show.legend = TRUE) +
+    scale_x_continuous(breaks = seq(0, 1, by = 0.25)) +
+    geom_point(position = 'jitter') +
+    labs(x = 'relative variance level UMI',
+         y = 'relative variance level NGS',
+         title = paste( sample, fragment, 'Variant levels of both Sequencing technology', sep = "_")) +
+    annotate(
+      'text',
+      x = 0.8,
+      y = 0.05,
+      label = paste0('R Squared = ', round(r_squared, digits = 4))
+    ) +
+    coord_cartesian(xlim = c(0,1), ylim = c(0,1))
+  
+  # Compare variance levels of different Sequencing methods
+  comparison_variant_levels_ngs_umi_per_position <-
+    NGS_filtered %>%
+    ggplot(aes(x = Position)) +
+    geom_point(aes(y = Variant_level_NGS, color = 'NGS'),
+               show.legend = TRUE) +
+    geom_point(aes(y = Variant_level_UMI, color = 'UMI'),
+               show.legend = TRUE) +
+    labs(x = 'position relative to reference sequence',
+         y = 'relative variant Level',
+         title = paste( sample, fragment, 'Variant levels per position and Sequencing technology', sep = "_"))
+  
+  jpeg(
+    file =  paste("figures", paste(
+      sample,
+      fragment,
+      "bland_altman.jpg",
+               sep = '_'), sep = "/"),
+    width = 10,
+    height = 10,
+    units = "in",
+    res = 300
+  )
+  
+  print(
+    bland.altman.plot(
+      NGS_filtered$Variant_level_NGS,
+      NGS_filtered$Variant_level_UMI,
+      main = paste(sample, fragment, "Variant levels", sep = "_"),
+      xlab = "Means",
+      ylab = "Differences",
+      graph.sys = "ggplot2",
+    ) +
+      geom_hline(aes(yintercept = 0)) +
+      coord_cartesian(xlim = c(0, 1), ylim = c(-0.2, 0.2)) +
+      annotate(
+        "text",
+        x = 0.7,
+        y = 0.15,
+        label = paste(
+          "cv =",
+          bland_stats$mean.diffs / mean(bland_stats$means) * 100,
+          sep = " "
+        )
+      )
+  )
+  dev.off()
+
+  ggsave(
+    paste(
+      sample,
+      fragment,
+      "comparison_variant_levels_ngs_umi_filtered.jpg",
+      sep = '_'
+    ),
+    comparison_variant_levels_ngs_umi,
+    path = "figures/"
+  )
+  
+  
+  ggsave(
+    paste(
+      sample,
+      fragment,
+      "comparison_variant_levels_ngs_umi_per_position_filtered.jpg",
+      sep = '_'
+    ),
+    comparison_variant_levels_ngs_umi_per_position,
+    path = "figures/"
+  )
+}
+
+write.csv(detected_mutations, "NGS_detected_mutations_filtered.csv")
+
+```
+
+## Pasmid Plots unfiltered
+
+```{r}
+
+detected_mutations <- tibble(sample = character(),
+                             fragment = integer(),
+                             num_of_muts_UMI = numeric())
+
+for( i in 1:n_plasmid_groups){
+  sample = plasmid_groups[[1]][i]
+  fragment = plasmid_groups[[2]][i]
+  
+  UMI_data_filtered <- plasmid_data %>%
+    filter(Sample_readable_PL == sample & Fragment == fragment)
+  
+    num_of_detected_mutations <- colSums(UMI_data_filtered != 0)
+  
+    detected_mutations <- detected_mutations %>% add_row(
+    sample = sample,
+    fragment = fragment,
+    num_of_muts_UMI = num_of_detected_mutations["variant_level_UMI"])
+  
+  plot_variance_level_per_sample <- ggplot(UMI_data_filtered,
+                                           aes(x = POS, y = variant_level_UMI)) +
+    geom_point() +
+    labs(x = 'Position compared to reference genome',
+         y = 'Variant level',
+         title = paste( sample, fragment, 'Variant level across the whole Amplicon', sep = "_")) +
+    ylim(0.0, 1.0)
+  
+  plot_variance_level_per_sample_zoomed <-
+    ggplot(UMI_data_filtered,
+           aes(x = POS, y = variant_level_UMI)) +
+    geom_point() +
+    coord_cartesian(ylim = c(0.00, 0.1)) +
+    labs(x = 'Position compared to reference genome',
+         y = 'Variant level',
+         title = paste( sample, fragment, 'Variant level across the whole amplicon', sep = "_")) +
+    ylim(0.0, 1.0)
+  
+  
+  
+  ggsave(
+    paste(sample,
+          fragment,
+          "plot_variance_level_per_sample.jpg",
+          sep = '_'),
+    plot_variance_level_per_sample,
+    path = "figures/"
+  )
+  
+  ggsave(
+    paste(
+      sample,
+      fragment,
+      "plot_variance_level_per_sample_zoomed.jpg",
+      sep = '_'
+    ),
+    plot_variance_level_per_sample_zoomed,
+    path = "figures/"
+  )
+  
+  
+  
+  
+}
+
+
+write.csv(detected_mutations, "Plasmid_detected_mutations_unfiltered.csv")
+
+```
+
+## Pasmid Plots filtered
+
+```{r}
+
+
+detected_mutations <- tibble(sample = character(),
+                             fragment = integer(),
+                             num_of_muts_UMI = numeric())
+
+for( i in 1:n_plasmid_groups_filtered){
+  sample = plasmid_groups_filtered[[1]][i]
+  fragment = plasmid_groups_filtered[[2]][i]
+  
+  UMI_data_filtered <- plasmid_data_filtered %>%
+    filter(Sample_readable_PL == sample & Fragment == fragment)
+  
+    num_of_detected_mutations <- colSums(UMI_data_filtered != 0)
+  
+    detected_mutations <- detected_mutations %>% add_row(
+    sample = sample,
+    fragment = fragment,
+    num_of_muts_UMI = num_of_detected_mutations["variant_level_UMI"])
+  
+  
+  
+  plot_variance_level_per_sample <- ggplot(UMI_data_filtered,
+                                           aes(x = POS, y = variant_level_UMI)) +
+    geom_point() +
+    labs(x = 'Position compared to reference genome',
+         y = 'Variant level',
+         title = paste( sample, fragment, 'Variant level across the whole Amplicon', sep = "_")) +
+    ylim(0.0, 1.0)
+  
+  plot_variance_level_per_sample_zoomed <-
+    ggplot(UMI_data_filtered,
+           aes(x = POS, y = variant_level_UMI)) +
+    geom_point() +
+    coord_cartesian(ylim = c(0.00, 0.1)) +
+    labs(x = 'Position compared to reference genome',
+         y = 'Variant level',
+         title = paste( sample, fragment, 'Variant level across the whole amplicon', sep = "_")) +
+    ylim(0.0, 1.0)
+  
+  
+  
+  ggsave(
+    paste(sample,
+          fragment,
+          "plot_variance_level_per_sample_filtered.jpg",
+          sep = '_'),
+    plot_variance_level_per_sample,
+    path = "figures/"
+  )
+  
+  ggsave(
+    paste(
+      sample,
+      fragment,
+      "plot_variance_level_per_sample_zoomed_filtered.jpg",
+      sep = '_'
+    ),
+    plot_variance_level_per_sample_zoomed,
+    path = "figures/"
+  )
+  
+  
+  
+  
+}
+
+
+write.csv(detected_mutations, "Plasmid_detected_mutations_filtered.csv")
+
+```
+
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
