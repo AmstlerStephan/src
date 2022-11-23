@@ -10,6 +10,8 @@ STR_start <- 2472
 STR_end <- 2505
 UMI_cutoff <- 0.003
 
+#Test commit
+
 args <- commandArgs(TRUE)
 if (!is.null(args[1])) {
   path <- args[1]
