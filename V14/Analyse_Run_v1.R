@@ -18,31 +18,37 @@ if (!is.null(args[1])) {
   print(path)
 }
 
-run <- str_extract(path, "run\\d")
+path <- "run10_V14/"
+run <- str_extract(path, "run\\d*")
+
 
 mutserve_summary <-
   read_tsv(
     paste(
       path,
+      "/ont_pl/",
       '/mutserve/',
       run,
-      '_summary_mutserve.txt',
+      '_V14_summary_mutserve.txt',
       sep = ""
     ),
     na = c('', 'NA', '-')
   )
 
+bed_file <- read_tsv("run10_V14/ont_pl/lpa-ref5104.bed")
+fragment <- names(bed_file)[3]
+
 barcodes <-
   read.csv("QC/nanostats_barcode_all_runs.csv") %>% 
   filter(read == "raw") %>% 
-  select(barcode:max, number_of_reads) %>% 
+  select(barcode:max, number_of_reads) %>%
   mutate(Q_score = max)
 
 run_info <- 
   read_csv("info/Status_overview.csv") %>% 
   select(Acronym, Run_directory, fastq_pass_reads, Fragment)
 
-NGS <- read_csv("data_ngs/NGS_AK_complete_noBAQ.csv") %>% 
+NGS <- read_csv("data_ngs/data_ngs/20221122_NGS_reference_data_SAPHIR_mutation_classification.csv") %>% 
   filter(pos < STR_start | pos > STR_end)
 
 ### filter mutserve data 
@@ -64,18 +70,14 @@ mutserve_combined <- bind_rows(mutserve_raw_full_conversions, mutserve_raw_varia
 ### Join Barcodes and mutserve data
 
 UMI <- mutserve_combined %>%
-  separate(SAMPLE,
-           c('Barcode', 'Fragment', 'Additional_info', 'Filetype'),
-           sep = '[_|.]') %>%
   mutate(
-    barcode = paste('NB', str_sub(Barcode, start = -2), sep = ''),
-    Fragment = as.numeric(str_sub(Fragment, start = str_locate(Fragment, '\\d+'))),
-    run = run
+    barcode = paste('NB', str_sub(SAMPLE, start = -2), sep = ''),
+    run = run,
+    fragment = fragment
   ) %>%
   inner_join(barcodes, by = c('barcode', 'run')) %>% 
   dplyr::rename(pos = POS, 
-                sample = Sample,
-                fragment = Fragment)
+                sample = Sample)
 
 UMI_Plasmids <- UMI %>%
   filter(grepl('A_B', sample)) %>%
