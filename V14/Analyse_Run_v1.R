@@ -163,8 +163,11 @@ NGS_filtered <- NGS %>%
   filter(Variant_NGS != 'D')
 
 path <- paste(path, 'results/', sep = '')
-dir.exists()
-dir.create(path = path, recursive = TRUE)
+
+if(!dir.exists(path)) {
+  dir.create(path = path)
+}
+
 write.csv(UMI, paste(path, 'UMI.csv', sep = ''))
 write.csv(UMI_filtered, paste(path, 'UMI_filtered.csv', sep = ''))
 write.csv(mutserve_combined, paste(path, 'mutserve_combined.csv', sep = ''))
