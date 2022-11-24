@@ -34,9 +34,9 @@ analyse_barcodes(){
 }
 
 loop_runs(){
-	for run in ./run*V14; do
+	for run in ./run*; do
 		echo $run
-		outdir="QC/Nanostats"/"V14"/$(basename $run)
+		outdir="QC/Nanostats"/$(basename $run)
 		combine_filter_reads $run $outdir
 		analyse_barcodes $outdir
 	done
@@ -46,5 +46,5 @@ qc_summary_R(){
 	Rscript src/V14/qc_runs_V14.R
 }
 
-#loop_runs
+loop_runs
 qc_summary_R

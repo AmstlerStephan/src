@@ -30,23 +30,7 @@ merge_result_files(){
 }
 
 echo $outdir
-#filtered="filtered"
-#raw="raw"
-#figures="figures"
-#NGS="NGS"
-
 rm -r $outdir
 mkdir -p $outdir
-
-#mkdir -p $outdir/$figures/reads_vs_cons_consensus_sequences
-#mkdir -p $outdir/$figures/$raw/$NGS/Bland_Altman
-#mkdir -p $outdir/$figures/$raw/$NGS/comp_per_pos
-#mkdir -p $outdir/$figures/$raw/$NGS/comp_variant_level
-#mkdir -p $outdir/$figures/$raw/Plasmid
-#mkdir -p $outdir/$figures/$filtered/$NGS/Bland_Altman
-#mkdir -p $outdir/$figures/$filtered/$NGS/comp_per_pos
-#mkdir -p $outdir/$figures/$filtered/$NGS/comp_variant_level
-#mkdir -p $outdir/$figures/$filtered/Plasmid
-#mkdir -p $outdir/Plasmid_tables
 
 merge_result_files
