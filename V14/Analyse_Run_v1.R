@@ -10,6 +10,10 @@ STR_start <- 2472
 STR_end <- 2505
 UMI_cutoff <- 0.003
 
+sample_sets <- c("AK|SAPHIR")
+SAPHIR_samples <- c("4612|4901|4451|4624|4864|5248|5538|5400")
+AK_samples <- c("AK03|AK07|AK14|AK17|AK33")
+
 #Test commit
 
 args <- commandArgs(TRUE)
@@ -19,7 +23,7 @@ if (!is.null(args[1])) {
 }
 
 path <- "run10_V14/"
-run <- str_extract(path, "run\\d*")
+run <- str_extract(path, "run\\d*_*[[:alnum:]]*")
 
 
 mutserve_summary <-
@@ -29,14 +33,14 @@ mutserve_summary <-
       "/ont_pl/",
       '/mutserve/',
       run,
-      '_V14_summary_mutserve.txt',
+      '_summary_mutserve.txt',
       sep = ""
     ),
     na = c('', 'NA', '-')
   )
 
-bed_file <- read_tsv("run10_V14/ont_pl/lpa-ref5104.bed")
-fragment <- names(bed_file)[3]
+# getting the fragment out of the bed file
+fragment <- as.numeric(names(read_tsv("run10_V14/ont_pl/lpa-ref5104.bed"))[3])
 
 barcodes <-
   read.csv("QC/nanostats_barcode_all_runs.csv") %>% 
@@ -91,7 +95,7 @@ UMI_Plasmids <- UMI %>%
     Sample_readable_PL = paste(Percent_A, Percent_B, sep = ':')
   )
 UMI_AK <- UMI %>%
-  filter(grepl('AK', sample) | grepl('5400', sample)) %>%
+  filter(grepl(sample_sets, sample)) %>%
   mutate(Sample_readable_AK = sample)
 
 UMI <- bind_rows(UMI_Plasmids, UMI_AK)
@@ -129,7 +133,6 @@ NGS <- NGS %>%
   select(
     sample,
     fragment,
-    Additional_info,
     Position,
     Ref_UMI,
     Variant_UMI,
@@ -160,7 +163,8 @@ NGS_filtered <- NGS %>%
   filter(Variant_NGS != 'D')
 
 path <- paste(path, 'results/', sep = '')
-
+dir.exists()
+dir.create(path = path, recursive = TRUE)
 write.csv(UMI, paste(path, 'UMI.csv', sep = ''))
 write.csv(UMI_filtered, paste(path, 'UMI_filtered.csv', sep = ''))
 write.csv(mutserve_combined, paste(path, 'mutserve_combined.csv', sep = ''))
