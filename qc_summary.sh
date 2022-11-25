@@ -20,9 +20,9 @@ add_to_overall_summary() {
 }
 
 loop_runs(){
-        for run in run[^_]*/; do
+        for run in run*/; do
 		echo $run
-		sequencing_summary="$run"sequencing_summary_*.txt
+		sequencing_summary="$run"sequencing_summary*.txt
 		nanostat $run $sequencing_summary
 		summarize_qc $run
         done
