@@ -12,6 +12,8 @@ if (!is.null(args[1])) {
   print(result_folder)
 }
 
+result_folder <- "results_all/"
+
 ### Create dirs
 dir_figures <- "figures"
 dir_NGS <- "NGS"
