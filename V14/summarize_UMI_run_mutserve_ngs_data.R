@@ -23,11 +23,6 @@ parser <- add_argument(
 )
 parser <- add_argument(
   parser,
-  "--bed_file",
-  help = "Bed file which was used for the pipeline"
-)
-parser <- add_argument(
-  parser,
   "--ngs_data",
   help = "File containing the NGS reference data"
 )
@@ -37,7 +32,6 @@ run_path <- argv$run_path
 nanostat_summary <- argv$nanostat_summary
 mutserve_summary <- argv$mutserve_summary
 ngs_data <- argv$ngs_data
-bed_file <- argv$bed_file
 
 ### define parameters 
 STR_start <- 2472
